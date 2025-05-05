@@ -1,14 +1,32 @@
-'use client';
+"use client";
 
-import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 export default function Search({ placeholder }: { placeholder: string }) {
+  const pathName = usePathname();
+  const searchParams = useSearchParams();
+  const { replace } = useRouter();
+  function updateSearch(term: string) {
+    console.log("term", term);
+    const params = new URLSearchParams(searchParams);
+    if (term) {
+      params.set("query", term);
+    } else {
+      params.delete("query");
+    }
+    replace(`${pathName}?${params.toString()}`);
+  }
   return (
     <div className="relative flex flex-1 flex-shrink-0">
       <label htmlFor="search" className="sr-only">
         Search
       </label>
       <input
+        defaultValue={searchParams.get("search") || ""}
+        onChange={(e) => {
+          updateSearch(e.target.value);
+        }}
         className="peer block w-full rounded-md border border-gray-200 py-[9px] pl-10 text-sm outline-2 placeholder:text-gray-500"
         placeholder={placeholder}
       />
