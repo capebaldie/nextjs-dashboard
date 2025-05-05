@@ -12,6 +12,8 @@ import { resolve } from "path";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 
+const ITEMS_PER_PAGE = 6;
+
 export async function fetchRevenue() {
   try {
     // Artificially delay a response for demo purposes.
@@ -46,6 +48,32 @@ export async function fetchLatestInvoices() {
       amount: formatCurrency(invoice.amount),
     }));
     return latestInvoices;
+  } catch (error) {
+    console.error("Database Error:", error);
+    throw new Error("Failed to fetch the latest invoices.");
+  }
+}
+
+export async function fetchAllInvoices(currentPage: number) {
+  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    const invoices = await sql<InvoicesTable[]>`
+       SELECT
+        invoices.id,
+        invoices.amount,
+        invoices.date,
+        invoices.status,
+        customers.name,
+        customers.email,
+        customers.image_url
+      FROM invoices
+      JOIN customers ON invoices.customer_id = customers.id
+      ORDER BY invoices.date DESC
+      LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}`;
+
+    return invoices;
   } catch (error) {
     console.error("Database Error:", error);
     throw new Error("Failed to fetch the latest invoices.");
@@ -89,7 +117,6 @@ export async function fetchCardData() {
   }
 }
 
-const ITEMS_PER_PAGE = 6;
 export async function fetchFilteredInvoices(
   query: string,
   currentPage: number
@@ -136,6 +163,21 @@ export async function fetchInvoicesPages(query: string) {
       invoices.amount::text ILIKE ${`%${query}%`} OR
       invoices.date::text ILIKE ${`%${query}%`} OR
       invoices.status ILIKE ${`%${query}%`}
+  `;
+
+    const totalPages = Math.ceil(Number(data[0].count) / ITEMS_PER_PAGE);
+    return totalPages;
+  } catch (error) {
+    console.error("Database Error:", error);
+    throw new Error("Failed to fetch total number of invoices.");
+  }
+}
+
+export async function fetchTotalInvoicesPages() {
+  try {
+    const data = await sql`SELECT COUNT(*)
+    FROM invoices
+    JOIN customers ON invoices.customer_id = customers.id
   `;
 
     const totalPages = Math.ceil(Number(data[0].count) / ITEMS_PER_PAGE);
