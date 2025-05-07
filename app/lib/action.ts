@@ -4,11 +4,26 @@ import { redirect } from "next/navigation";
 import postgres from "postgres";
 import { z } from "zod";
 
+export type State = {
+  errors?: {
+    customerId?: string[];
+    amount?: string[];
+    status?: string[];
+  };
+  message?: string | null;
+};
+
 const FormSchema = z.object({
   id: z.string(),
-  customerId: z.string(),
-  amount: z.coerce.number(),
-  status: z.enum(["pending", "paid"]),
+  customerId: z.string({
+    invalid_type_error: "Please select a customer",
+  }),
+  amount: z.coerce
+    .number()
+    .gt(0, { message: "Please enter an amount greater than $0." }),
+  status: z.enum(["pending", "paid"], {
+    invalid_type_error: "Please select an invoice status.",
+  }),
   date: z.string(),
 });
 
@@ -16,19 +31,26 @@ const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 
 const CreateInvoice = FormSchema.omit({ id: true, date: true });
 
-export async function createInvoice(formData: FormData) {
+export async function createInvoice(prevState: State, formData: FormData) {
   // making type safe with Zod
-  const parsedData = CreateInvoice.parse({
+  const parsedData = CreateInvoice.safeParse({
     customerId: formData.get("customerId"),
     amount: formData.get("amount"),
     status: formData.get("status"),
   });
-  const amountInCents = parsedData.amount * 100;
+  // immediate return of defined State is there user try to submit the form without filling
+  if (!parsedData.success) {
+    return {
+      errors: parsedData.error.flatten().fieldErrors,
+      message: "Missing Fields. Failed to Create Invoice.",
+    };
+  }
+  const amountInCents = parsedData.data?.amount * 100;
   const date = new Date().toISOString().split("T")[0];
   try {
     await sql`
         INSERT INTO invoices (customer_id, amount, status, date)
-        VALUES (${parsedData.customerId}, ${amountInCents}, ${parsedData.status}, ${date})
+        VALUES (${parsedData.data.customerId}, ${amountInCents}, ${parsedData.data.status}, ${date})
       `;
   } catch (error) {
     console.log(error);
@@ -38,19 +60,29 @@ export async function createInvoice(formData: FormData) {
   redirect("/dashboard/invoices");
 }
 
-export async function editInvoice(id: string, formData: FormData) {
+export async function editInvoice(
+  id: string,
+  prevState: State,
+  formData: FormData
+) {
   // making type safe with Zod
-  const parsedData = CreateInvoice.parse({
+  const parsedData = CreateInvoice.safeParse({
     customerId: formData.get("customerId"),
     amount: formData.get("amount"),
     status: formData.get("status"),
   });
-  const amountInCents = parsedData.amount * 100;
+  if (!parsedData.success) {
+    return {
+      errors: parsedData.error.flatten().fieldErrors,
+      message: "Missing Fields. Failed to Update Invoice.",
+    };
+  }
+  const amountInCents = parsedData.data.amount * 100;
   const date = new Date().toISOString().split("T")[0];
   try {
     await sql`
       UPDATE invoices  
-      SET customer_id = ${parsedData.customerId}, amount = ${amountInCents}, status = ${parsedData.status}, date = ${date}
+      SET customer_id = ${parsedData.data.customerId}, amount = ${amountInCents}, status = ${parsedData.data.status}, date = ${date}
       WHERE id = ${id}`;
   } catch (error) {
     console.log(error);
