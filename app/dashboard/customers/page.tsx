@@ -13,8 +13,8 @@ export default async function Page() {
       </div>
       <div className="mt-4 flex items-center justify-between gap-2 md:mt-8">
         <ul>
-          {customers.map((customer) => (
-            <li>{customer.name}</li>
+          {customers.map((customer, index) => (
+            <li key={index}>{customer.name}</li>
           ))}
         </ul>
       </div>
